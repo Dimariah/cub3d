@@ -6,7 +6,7 @@
 /*   By: yiken <yiken@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/10/02 12:52:35 by yiken             #+#    #+#             */
-/*   Updated: 2024/10/16 13:40:34 by yiken            ###   ########.fr       */
+/*   Updated: 2024/10/17 15:37:19 by yiken            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,7 @@ void	init_data(t_data *data, char **map)
 	data->screen_height = data->screen_tile_size * data->rows;
 	// if (data->screen_height > screen_max_height || data->screen_width > screen_max_width)
 	// 	(put_err("too large map\n"), exit(1));
-	data->mini_map_tile_size = 24;
+	data->mini_map_tile_size = 24; //24
 	data->mini_map_width = data->mini_map_tile_size * data->columns;
 	data->mini_map_height = data->mini_map_tile_size * data->rows;
 	data->num_rays = data->screen_width;
@@ -246,11 +246,13 @@ void	cast_ray(t_ray *ray, t_mlx *mlx)
 	ray->distance = horz_distance;
 	ray->wall_hit_x = ray->horz_intersect_x;
 	ray->wall_hit_y = ray->horz_intersect_y;
+	ray->is_vertical_hit = 0;
 	if (horz_distance > vert_distance)
 	{
 		ray->wall_hit_x = ray->vert_intersect_x;
 		ray->wall_hit_y = ray->vert_intersect_y;
 		ray->distance = vert_distance;
+		ray->is_vertical_hit = 1;
 	}
 }
 
@@ -388,17 +390,44 @@ void	draw_rays(t_mlx *mlx)
 	}
 }
 
+// draws and returns a color buffer
+uint32_t	*draw_texture(int width, int height)
+{
+	uint32_t	*buffer;
+
+	buffer = malloc(sizeof(uint32_t) * width * height);
+	for (int i = 0; i < height; i++) // i as y
+	{
+		for (int j = 0; j < width; j++)
+		{
+			buffer[(i * width) + j] = (i % 8 && j % 8) ? 0x0000FFFF : 0xFF0000FF;
+		}
+	}
+	return (buffer);
+}
+
 void	draw_wall(t_mlx *mlx, int x, double y, double wall_strip_height)
 {
-	double	i;
+	int			i;
+	int			textureX;
+	int			textureY;
+	uint32_t	*texture;
+	uint32_t	color;
 
+	texture = draw_texture(mlx->data->mini_map_tile_size, mlx->data->mini_map_tile_size);
+	textureX = (int)(mlx->data->rays + x)->wall_hit_x % (int)mlx->data->mini_map_tile_size;
+	if ((mlx->data->rays + x)->is_vertical_hit)
+		textureX = (int)(mlx->data->rays + x)->wall_hit_y % (int)mlx->data->mini_map_tile_size;
 	i = y;
 	if (i < 0)
 		i = 0;
-	while (i < (int)(y + wall_strip_height) && i < mlx->data->screen_height)
+	while (i < (int)(y + wall_strip_height) && i < (int)mlx->data->screen_height)
 	{
-		mlx_put_pixel(mlx->img.frame, x, i, 0x99555194);
-		i++;
+		textureY = (i - (int)y) * (mlx->data->mini_map_tile_size / wall_strip_height);
+		if (textureY > mlx->data->mini_map_tile_size)
+			break;
+		color = texture[(textureY * (int)mlx->data->mini_map_tile_size) + textureX];
+		mlx_put_pixel(mlx->img.frame, x, i++, color);
 	}
 }
 
@@ -417,12 +446,12 @@ void	draw_walls(t_mlx *mlx)
 		ray = mlx->data->rays + i;
 		perp_distance = ray->distance * cos(ray->angle - mlx->player.angle);
 		wall_strip_height = (mlx->data->mini_map_tile_size / perp_distance) * distance_projection_plane;
-		draw_wall(mlx, i, (int)(mlx->data->screen_height / 2) - (wall_strip_height / 2), wall_strip_height);
+		draw_wall(mlx, i, (mlx->data->screen_height / 2) - (wall_strip_height / 2), wall_strip_height);
 		i++;
 	}
 }
 
-void	draw_ceiling_floor_color(t_mlx *mlx)
+void	draw_ceiling_floor(t_mlx *mlx)
 {
 	uint32_t	*color_buffer;
 	uint32_t 	ceiling_color = 0x65FBF1FF; //cloudy sky color
@@ -453,7 +482,7 @@ void	draw_ceiling_floor_color(t_mlx *mlx)
 
 void	update_frame(t_mlx *mlx)
 {
-	draw_ceiling_floor_color(mlx);
+	draw_ceiling_floor(mlx);
 	draw_walls(mlx);
 	draw_map(mlx);
 	draw_rays(mlx);
